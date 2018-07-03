@@ -112,7 +112,7 @@ function entity_query_entity_query_alter(Select $query) {
 function entity_query_views_alter(Select $select) {
   $tables_info = $select->getTables();
   $table_info = reset($tables_info);
-  if ($entity_type = _entity_get_entity_type_id_from_table($table_info['table'])) {
+  if ($entity_type = _entity_get_entity_type_from_table($table_info['table'])) {
     SqlQueryAlter::create(\Drupal::getContainer())->queryAlter($select, $entity_type);
   }
 }
@@ -126,17 +126,18 @@ function entity_query_views_alter(Select $select) {
  * @return \Drupal\Core\Entity\EntityTypeInterface|null
  *   The entity type, or NULL if unknown.
  */
-function _entity_get_entity_type_id_from_table($table_name) {
-  foreach (\Drupal::entityTypeManager()->getDefinitions() as $entity_type) {
-    $tables = [
-      $entity_type->getBaseTable(),
-      $entity_type->getDataTable(),
-      $entity_type->getRevisionTable(),
-      $entity_type->getRevisionDataTable(),
-    ];
-    if (in_array($table_name, $tables)) {
-      return $entity_type;
+function _entity_get_entity_type_from_table($table_name) {
+  $entity_type_manager = \Drupal::entityTypeManager();
+  $tables = &drupal_static(__FUNCTION__);
+  if (!isset($tables)) {
+    foreach ($entity_type_manager->getDefinitions() as $entity_type_id => $entity_type) {
+      $tables[$entity_type->getBaseTable()] = $entity_type_id;
+      $tables[$entity_type->getDataTable()] = $entity_type_id;
+      $tables[$entity_type->getRevisionTable()] = $entity_type_id;
+      $tables[$entity_type->getRevisionDataTable()] = $entity_type_id;
     }
   }
-  return NULL;
+  return isset($tables[$table_name])
+    ? $entity_type_manager->getDefinition($tables[$table_name])
+    : NULL;
 }

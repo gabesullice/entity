@@ -2,6 +2,7 @@
 
 namespace Drupal\Tests\entity\Unit\Query;
 
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\entity\Query\Condition;
 use Drupal\Tests\UnitTestCase;
 
@@ -18,7 +19,7 @@ class ConditionTest extends UnitTestCase {
    * @expectedExceptionMessage Unrecognized operator "INVALID".
    */
   public function testInvalidOperator() {
-    $condition = new Condition('uid', '1', 'INVALID');
+    Condition::create('uid', '1', 'INVALID', new CacheableMetadata());
   }
 
   /**
@@ -28,19 +29,19 @@ class ConditionTest extends UnitTestCase {
    * ::covers __toString.
    */
   public function testGetters() {
-    $condition = new Condition('uid', '2');
+    $condition = Condition::create('uid', '2', '=', new CacheableMetadata());
     $this->assertEquals('uid', $condition->getField());
     $this->assertEquals('2', $condition->getValue());
     $this->assertEquals('=', $condition->getOperator());
     $this->assertEquals("uid = '2'", $condition->__toString());
 
-    $condition = new Condition('type', ['article', 'page']);
+    $condition = Condition::create('type', ['article', 'page'], 'IN', new CacheableMetadata());
     $this->assertEquals('type', $condition->getField());
     $this->assertEquals(['article', 'page'], $condition->getValue());
     $this->assertEquals('IN', $condition->getOperator());
     $this->assertEquals("type IN ['article', 'page']", $condition->__toString());
 
-    $condition = new Condition('title', NULL, 'IS NULL');
+    $condition = Condition::create('title', NULL, 'IS NULL', new CacheableMetadata());
     $this->assertEquals('title', $condition->getField());
     $this->assertEquals(NULL, $condition->getValue());
     $this->assertEquals('IS NULL', $condition->getOperator());

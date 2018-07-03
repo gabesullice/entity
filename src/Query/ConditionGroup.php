@@ -4,7 +4,8 @@ namespace Drupal\entity\Query;
 
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Cache\CacheableDependencyInterface;
-use Drupal\Core\Cache\RefinableCacheableDependencyTrait;
+use Drupal\Core\Cache\CacheableDependencyTrait;
+use Drupal\Core\Cache\CacheableMetadata;
 
 /**
  * Represents a group of access conditions.
@@ -35,7 +36,7 @@ use Drupal\Core\Cache\RefinableCacheableDependencyTrait;
  */
 final class ConditionGroup implements \Countable, CacheableDependencyInterface {
 
-  use RefinableCacheableDependencyTrait;
+  use CacheableDependencyTrait;
 
   /**
    * The conditions.
@@ -56,9 +57,15 @@ final class ConditionGroup implements \Countable, CacheableDependencyInterface {
    *
    * @param string $conjunction
    *   The conjunction.
+   * @param \Drupal\Core\Cache\CacheableMetadata|null $cacheability
+   *   The cacheability information for this condition group. In most cases,
+   *   this is not required; all cacheability will be inherited from the group's
+   *   conditions. However, in some cases, an empty group still requires
+   *   cacheability.
    */
-  public function __construct($conjunction = 'AND') {
+  public function __construct($conjunction = 'AND', CacheableMetadata $cacheability = NULL) {
     $this->conjunction = $conjunction;
+    $this->setCacheability($cacheability ?: new CacheableMetadata());
   }
 
   /**
@@ -72,37 +79,23 @@ final class ConditionGroup implements \Countable, CacheableDependencyInterface {
   }
 
   /**
-   * Adds a condition.
+   * Adds a condition or condition group to this group.
    *
-   * @param string|\Drupal\entity\Query\ConditionGroup $field
+   * @param \Drupal\entity\Query\Condition|\Drupal\entity\Query\ConditionGroup $condition
    *   Either a condition group (for nested AND/OR conditions), or a
    *   field name with an optional column name. E.g: 'uid', 'address.locality'.
-   * @param mixed $value
-   *   The value.
-   * @param string $operator
-   *   The operator.
-   *   Possible values: =, <>, <, <=, >, >=, BETWEEN, NOT BETWEEN,
-   *                   IN, NOT IN, IS NULL, IS NOT NULL.
    *
    * @return $this
    */
-  public function addCondition($field, $value = NULL, $operator = NULL) {
-    if ($field instanceof ConditionGroup) {
-      if ($field->count() === 1) {
-        // The condition group only has a single condition, merge it.
-        $this->conditions[] = reset($field->getConditions());
-        $this->addCacheTags($field->getCacheTags());
-        $this->addCacheContexts($field->getCacheContexts());
-        $this->mergeCacheMaxAge($field->getCacheMaxAge());
-      }
-      elseif ($field->count() > 1) {
-        $this->conditions[] = $field;
-      }
+  public function addCondition($condition) {
+    assert($condition instanceof Condition || $condition instanceof ConditionGroup);
+    if ($condition instanceof ConditionGroup && $condition->count() === 1) {
+      // The condition group only has a single condition, merge it.
+      $this->conditions[] = reset($condition->getConditions());
     }
     else {
-      $this->conditions[] = new Condition($field, $value, $operator);
+      $this->conditions[] = $condition;
     }
-
     return $this;
   }
 
@@ -156,39 +149,21 @@ final class ConditionGroup implements \Countable, CacheableDependencyInterface {
    * {@inheritdoc}
    */
   public function getCacheTags() {
-    $tags = $this->cacheTags;
-    foreach ($this->conditions as $condition) {
-      if ($condition instanceof ConditionGroup) {
-        $tags = array_merge($tags, $condition->getCacheTags());
-      }
-    }
-    return Cache::mergeTags($tags, []);
+    return array_reduce($this->conditions, [Cache::class, 'mergeTags'], $this->cacheTags);
   }
 
   /**
    * {@inheritdoc}
    */
   public function getCacheContexts() {
-    $cache_contexts = $this->cacheContexts;
-    foreach ($this->conditions as $condition) {
-      if ($condition instanceof ConditionGroup) {
-        $cache_contexts = array_merge($cache_contexts, $condition->getCacheContexts());
-      }
-    }
-    return Cache::mergeContexts($cache_contexts);
+    return array_reduce($this->conditions, [Cache::class, 'mergeContexts'], $this->cacheContexts);
   }
 
   /**
    * {@inheritdoc}
    */
   public function getCacheMaxAge() {
-    $max_age = $this->cacheMaxAge;
-    foreach ($this->conditions as $condition) {
-      if ($condition instanceof ConditionGroup) {
-        $max_age = Cache::mergeMaxAges($max_age, $condition->getCacheMaxAge());
-      }
-    }
-    return $max_age;
+    return array_reduce($this->conditions, [Cache::class, 'mergeMaxAges'], $this->cacheMaxAge);
   }
 
 }

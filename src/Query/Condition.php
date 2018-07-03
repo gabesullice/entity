@@ -2,10 +2,16 @@
 
 namespace Drupal\entity\Query;
 
+use Drupal\Core\Cache\CacheableDependencyInterface;
+use Drupal\Core\Cache\CacheableDependencyTrait;
+use Drupal\Core\Cache\CacheableMetadata;
+
 /**
  * Represents a single access condition.
  */
 final class Condition {
+
+  use CacheableDependencyTrait;
 
   /**
    * The supported operators.
@@ -49,12 +55,10 @@ final class Condition {
    *   The operator.
    *   Possible values: =, <>, <, <=, >, >=, BETWEEN, NOT BETWEEN,
    *                   IN, NOT IN, IS NULL, IS NOT NULL.
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
+   *   The cacheability information for this condition.
    */
-  public function __construct($field, $value, $operator = NULL) {
-    // Provide a default based on the data type of the value.
-    if (!isset($operator)) {
-      $operator = is_array($value) ? 'IN' : '=';
-    }
+  public function __construct($field, $value, $operator, CacheableMetadata $cacheability) {
     // Validate the selected operator.
     if (!in_array($operator, self::$supportedOperators)) {
       throw new \InvalidArgumentException(sprintf('Unrecognized operator "%s".', $operator));
@@ -63,6 +67,16 @@ final class Condition {
     $this->field = $field;
     $this->value = $value;
     $this->operator = $operator;
+    $this->setCacheability($cacheability);
+  }
+
+  /**
+   * Creates a new Condition object.
+   *
+   * @see self::__construct().
+   */
+  public static function create($field, $value, $operator, CacheableMetadata $cacheability) {
+    return new static($field, $value, $operator, $cacheability);
   }
 
   /**

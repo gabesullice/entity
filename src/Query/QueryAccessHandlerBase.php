@@ -2,6 +2,7 @@
 
 namespace Drupal\entity\Query;
 
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Entity\EntityHandlerInterface;
 use Drupal\Core\Entity\EntityPublishedInterface;
 use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
@@ -75,8 +76,7 @@ abstract class QueryAccessHandlerBase implements EntityHandlerInterface, QueryAc
 
     if ($account->hasPermission("administer {$entity_type_id}")) {
       // The user has full access to all operations, no conditions needed.
-      $conditions = new ConditionGroup('OR');
-      $conditions->addCacheContexts(['user.permissions']);
+      $conditions = new ConditionGroup('OR', static::cachePerPermissions());
       return $conditions;
     }
 
@@ -93,9 +93,8 @@ abstract class QueryAccessHandlerBase implements EntityHandlerInterface, QueryAc
       if ($entity_conditions) {
         // Restrict the existing conditions to published entities only.
         $conditions = new ConditionGroup('AND');
-        $conditions->addCacheContexts(['user.permissions']);
         $conditions->addCondition($entity_conditions);
-        $conditions->addCondition($published_key, '1');
+        $conditions->addCondition(Condition::create($published_key, '1', '=', static::cachePermanent()));
       }
     }
     else {
@@ -106,8 +105,7 @@ abstract class QueryAccessHandlerBase implements EntityHandlerInterface, QueryAc
       // The user doesn't have access to any entities.
       // Falsify the query to ensure no results are returned.
       $conditions = new ConditionGroup('OR');
-      $conditions->addCacheContexts(['user.permissions']);
-      $conditions->addCondition($this->entityType->getKey('id'), NULL, 'IS NULL');
+      $conditions->addCondition(Condition::create($this->entityType->getKey('id'), NULL, 'IS NULL', static::cachePerPermissions()));
     }
 
     return $conditions;
@@ -129,8 +127,7 @@ abstract class QueryAccessHandlerBase implements EntityHandlerInterface, QueryAc
     $uid_key = $this->entityType->getKey('uid');
     $bundle_key = $this->entityType->getKey('bundle');
 
-    $conditions = new ConditionGroup('OR');
-    $conditions->addCacheContexts(['user.permissions']);
+    $conditions = new ConditionGroup('OR', static::cachePerPermissions());
     // Any $entity_type permission.
     if ($account->hasPermission("$operation any {$entity_type_id}")) {
       // The user has full access, no conditions needed.
@@ -146,22 +143,20 @@ abstract class QueryAccessHandlerBase implements EntityHandlerInterface, QueryAc
     }
     // Any $bundle permission.
     if ($bundles_with_any_permission) {
-      $conditions->addCondition($bundle_key, $bundles_with_any_permission);
+      $conditions->addCondition(Condition::create($bundle_key, $bundles_with_any_permission, '=', static::cachePermanent()));
     }
 
     // Own $entity_type permission.
     if ($account->hasPermission("$operation own $entity_type_id")) {
-      $conditions->addCacheContexts(['user']);
-      $conditions->addCondition($uid_key, $account->id());
+      $conditions->addCondition(Condition::create($uid_key, $account->id(), '=', static::cachePerUser()));
     }
 
     // Own $bundle permission.
     foreach ($bundles as $bundle) {
       if ($account->hasPermission("$operation own $bundle $entity_type_id")) {
-        $conditions->addCacheContexts(['user']);
         $conditions->addCondition((new ConditionGroup('AND'))
-          ->addCondition($uid_key, $account->id())
-          ->addCondition($bundle_key, $bundle)
+          ->addCondition(Condition::create($uid_key, $account->id(), '=', static::cachePerUser()))
+          ->addCondition(Condition::create($bundle_key, $bundle, '=', static::cachePermanent()))
         );
       }
     }
@@ -185,7 +180,6 @@ abstract class QueryAccessHandlerBase implements EntityHandlerInterface, QueryAc
     $bundle_key = $this->entityType->getKey('bundle');
 
     $conditions = new ConditionGroup('OR');
-    $conditions->addCacheContexts(['user.permissions']);
     // The $entity_type permission.
     if ($account->hasPermission("$operation {$entity_type_id}")) {
       // The user has full access, no conditions needed.
@@ -201,10 +195,37 @@ abstract class QueryAccessHandlerBase implements EntityHandlerInterface, QueryAc
     }
     // The $bundle permission.
     if ($bundles_with_any_permission) {
-      $conditions->addCondition($bundle_key, $bundles_with_any_permission);
+      $conditions->addCondition(Condition::create($bundle_key, $bundles_with_any_permission, '=', static::cachePermanent()));
     }
 
     return $conditions->count() ? $conditions : NULL;
+  }
+
+  /**
+   * Creates CacheableMetadata that varies per user.
+   *
+   * @return \Drupal\Core\Cache\CacheableMetadata
+   */
+  protected static function cachePerUser() {
+    return (new CacheableMetadata())->addCacheContexts(['user']);
+  }
+
+  /**
+   * Creates CacheableMetadata that varies by user permissions.
+   *
+   * @return \Drupal\Core\Cache\CacheableMetadata
+   */
+  protected static function cachePerPermissions() {
+    return (new CacheableMetadata())->addCacheContexts(['user.permissions']);
+  }
+
+  /**
+   * Creates CacheableMetadata that does not vary, expire or become invalid.
+   *
+   * @return \Drupal\Core\Cache\CacheableMetadata
+   */
+  protected static function cachePermanent() {
+    return new CacheableMetadata();
   }
 
 }

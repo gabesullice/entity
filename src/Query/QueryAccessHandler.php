@@ -16,13 +16,11 @@ class QueryAccessHandler extends QueryAccessHandlerBase {
    * {@inheritdoc}
    */
   protected function buildEntityOwnerConditions($operation, AccountInterface $account) {
+    // EntityPermissionProvider doesn't provide own/any view permissions.
     if ($operation == 'view') {
-      // EntityPermissionProvider doesn't provide own/any view permissions.
       return $this->buildEntityConditions($operation, $account);
     }
-    else {
-      return parent::buildEntityOwnerConditions($operation, $account);
-    }
+    return parent::buildEntityOwnerConditions($operation, $account);
   }
 
 }

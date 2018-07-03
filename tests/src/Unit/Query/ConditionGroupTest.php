@@ -2,6 +2,7 @@
 
 namespace Drupal\Tests\entity\Unit;
 
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\entity\Query\Condition;
 use Drupal\entity\Query\ConditionGroup;
 use Drupal\Tests\UnitTestCase;
@@ -20,22 +21,22 @@ class ConditionGroupTest extends UnitTestCase {
    */
   public function testGetters() {
     $condition_group = new ConditionGroup();
-    $condition_group->addCondition('uid', '2');
+    $condition_group->addCondition(Condition::create('uid', '2', '=', new CacheableMetadata()));
     $this->assertEquals('AND', $condition_group->getConjunction());
     $expected_conditions = [
-      new Condition('uid', '2'),
+      Condition::create('uid', '2', '=', new CacheableMetadata()),
     ];
     $this->assertEquals($expected_conditions, $condition_group->getConditions());
     $this->assertEquals(1, $condition_group->count());
     $this->assertEquals("uid = '2'", $condition_group->__toString());
 
     $condition_group = new ConditionGroup('OR');
-    $condition_group->addCondition('type', ['article', 'page']);
-    $condition_group->addCondition('status', '1', '<>');
+    $condition_group->addCondition(Condition::create('type', ['article', 'page'], 'IN', new CacheableMetadata()));
+    $condition_group->addCondition(Condition::create('status', '1', '<>', new CacheableMetadata()));
     $this->assertEquals('OR', $condition_group->getConjunction());
     $expected_conditions = [
-      new Condition('type', ['article', 'page']),
-      new Condition('status', '1', '<>'),
+      Condition::create('type', ['article', 'page'], 'IN', new CacheableMetadata()),
+      Condition::create('status', '1', '<>', new CacheableMetadata()),
     ];
     $expected_lines = [
       "(",
@@ -50,13 +51,13 @@ class ConditionGroupTest extends UnitTestCase {
 
     // Nested condition group with a single condition.
     $condition_group = new ConditionGroup();
-    $condition_group->addCondition('type', ['article', 'page']);
+    $condition_group->addCondition(Condition::create('type', ['article', 'page'], 'IN', new CacheableMetadata()));
     $condition_group->addCondition((new ConditionGroup('AND'))
-      ->addCondition('status', '1')
+      ->addCondition(Condition::create('status', '1', '=', new CacheableMetadata()))
     );
     $expected_conditions = [
-      new Condition('type', ['article', 'page']),
-      new Condition('status', '1'),
+      Condition::create('type', ['article', 'page'], 'IN', new CacheableMetadata()),
+      Condition::create('status', '1', '=', new CacheableMetadata()),
     ];
     $expected_lines = [
       "(",
@@ -72,13 +73,13 @@ class ConditionGroupTest extends UnitTestCase {
 
     // Nested condition group with multiple conditions.
     $condition_group = new ConditionGroup();
-    $condition_group->addCondition('type', ['article', 'page']);
+    $condition_group->addCondition(Condition::create('type', ['article', 'page'], 'IN', (new CacheableMetadata())->addCacheContexts(['foo'])));
     $nested_condition_group = new ConditionGroup('OR');
-    $nested_condition_group->addCondition('uid', '1');
-    $nested_condition_group->addCondition('status', '1');
+    $nested_condition_group->addCondition(Condition::create('uid', '1', '=', (new CacheableMetadata())->addCacheContexts(['bar'])));
+    $nested_condition_group->addCondition(Condition::create('status', '1', '=', new CacheableMetadata()));
     $condition_group->addCondition($nested_condition_group);
     $expected_conditions = [
-      new Condition('type', ['article', 'page']),
+      Condition::create('type', ['article', 'page'], '=', new CacheableMetadata()),
       $nested_condition_group,
     ];
     $expected_lines = [
@@ -96,6 +97,7 @@ class ConditionGroupTest extends UnitTestCase {
     $this->assertEquals('AND', $condition_group->getConjunction());
     $this->assertEquals(2, $condition_group->count());
     $this->assertEquals(implode("\n", $expected_lines), $condition_group->__toString());
+    $this->assertArrayEquals(['foo', 'bar'], $condition_group->getCacheContexts());
   }
 
 }
